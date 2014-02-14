@@ -20,6 +20,7 @@
 #define RTOS_H_
 
 #include "gdb_proto.h"
+#include "util.h"
 
 #define MAX_SYMBOL_LEN 20
 #define MAX_NAME_LEN   64
@@ -43,6 +44,7 @@ struct rtos_data {
 	uint64_t current_thread;
 	uint64_t current_thread_id;
 	int (*update_threads)(struct rtos_data *rtos);
+	int (*get_thread_regs)(struct rtos_data *rtos, uint64_t tid, address_t *regs);
 	void *extra;
 };
 

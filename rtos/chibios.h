@@ -24,5 +24,6 @@
 extern struct rtos_data chibios_data;
 
 int chibios_update_threads(struct rtos_data *rtos);
+int chibios_get_thread_regs(struct rtos_data *rtos, uint64_t tid, address_t *regs);
 
 #endif /* CHIBIOS_H_ */

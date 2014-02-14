@@ -23,6 +23,8 @@
 #include <inttypes.h>
 
 #include "rtos.h"
+#include "util.h"
+#include "device.h"
 #include "chibios.h"
 #include "gdb_proto.h"
 #include "output.h"
@@ -147,8 +149,27 @@ int rtos_handle_generic_cmd(struct gdb_data *data, char *buf, int *handled)
 	if (!strncmp(buf, "g", 1)) {
 		if (rtos) {
 			if ((rtos->current_thread_id != -1) &&
-				(rtos->current_thread_id != rtos->current_thread))
-				return gdb_send(data, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+				(rtos->current_thread_id != rtos->current_thread)) {
+
+				address_t regs[DEVICE_NUM_REGS];
+				char buf[DEVICE_NUM_REGS*4+1];
+				int i;
+
+				if (rtos->get_thread_regs(rtos, rtos->current_thread_id, regs) < 0)
+					return gdb_send(data, "E00");
+
+				for (i=0; i<DEVICE_NUM_REGS; i++)
+					if (regs[i] == ADDRESS_NONE)
+						snprintf(buf+4*i, 5, "xxxx");
+					else
+						snprintf(buf+4*i, 5, "%02x%02x",
+								 regs[i] & 0xff,
+								 (regs[i] >> 8) & 0xff);
+
+				buf[DEVICE_NUM_REGS*4] = '\x00';
+
+				return gdb_send(data, buf);
+			}
 		}
 
 		/* Query RTOS-specific symbol */

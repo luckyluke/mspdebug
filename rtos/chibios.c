@@ -20,7 +20,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
+#include "util.h"
 #include "device.h"
 #include "gdb_proto.h"
 #include "chibios.h"
@@ -77,6 +79,28 @@ typedef struct {
 
 #define THD_STATE_UNKNOWN       15
 
+/* Assume 16 bit, little endian */
+#define regmsp_t uint16_t
+
+/**
+ * @brief   System saved context.
+ * @details This structure represents the inner stack frame during a context
+ *          switching.
+ * Copied from os/ports/GCC/MSP430/chcore.h
+ */
+struct intctx {
+  regmsp_t      r4;
+  regmsp_t      r5;
+  regmsp_t      r6;
+  regmsp_t      r7;
+  regmsp_t      r8;
+  regmsp_t      r9;
+  regmsp_t      r10;
+  regmsp_t      r11;
+  regmsp_t      pc;
+};
+
+
 static char *thread_state_names[] = {"READY",
 									 "CURRENT",
 									 "SUSPENDED",
@@ -106,6 +130,7 @@ struct rtos_data chibios_data = {"ChibiOS",
 								 0,
 								 -1,
 								 chibios_update_threads,
+								 chibios_get_thread_regs,
 								 NULL};
 
 
@@ -279,4 +304,53 @@ int chibios_update_threads(struct rtos_data *rtos)
 	}
 
 	return rtos->thread_count;
+}
+
+int chibios_get_thread_regs(struct rtos_data *rtos, uint64_t tid, address_t *regs)
+{
+	int i;
+	uint16_t sp;
+	chdebug_t *debug;
+	//uint16_t intctx[9];
+	struct intctx ctx;
+
+	if (!regs)
+		return -1;
+
+	if (!rtos)
+		return -1;
+
+	if (chibios_update_debug(rtos) < 0)
+		return -1;
+
+	debug = (chdebug_t*)rtos->extra;
+
+	if (readaddr(tid + debug->cf_off_ctx, &sp) < 0)
+		return -1;
+
+	if (device_readmem(sp, (uint8_t*)&ctx, sizeof(struct intctx)) < 0)
+		return -1;
+
+	/* printf("tid %"PRIu64" sp %x\n", tid, sp); */
+
+	for (i=0; i<DEVICE_NUM_REGS; i++){
+		regs[i] = ADDRESS_NONE;
+	}
+
+	regs[0] = ctx.pc;
+	regs[1] = sp + sizeof(struct intctx);
+	regs[4] = ctx.r4;
+	regs[5] = ctx.r5;
+	regs[6] = ctx.r6;
+	regs[7] = ctx.r7;
+	regs[8] = ctx.r8;
+	regs[9] = ctx.r9;
+	regs[10] = ctx.r10;
+	regs[11] = ctx.r11;
+
+	/* for (i=0; i<DEVICE_NUM_REGS; i++){ */
+	/* 	printf("reg %d val %04x\n", i, regs[i]); */
+	/* } */
+
+	return 0;
 }
