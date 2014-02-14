@@ -34,6 +34,7 @@
 #include "expr.h"
 #include "gdb_proto.h"
 #include "ctrlc.h"
+#include "rtos.h"
 
 /************************************************************************
  * GDB server
@@ -381,11 +382,6 @@ static int restart_program(struct gdb_data *data)
 	return gdb_send(data, "OK");
 }
 
-static int gdb_send_empty_threadlist(struct gdb_data *data)
-{
-	return gdb_send(data, "<?xml version=\"1.0\"?><threads></threads>");
-}
-
 static int gdb_send_supported(struct gdb_data *data)
 {
 	gdb_packet_start(data);
@@ -396,6 +392,8 @@ static int gdb_send_supported(struct gdb_data *data)
 
 static int process_gdb_command(struct gdb_data *data, char *buf)
 {
+	int ret, handled=0;
+
 #ifdef DEBUG_GDB
 	printc("process_gdb_command: %s\n", buf);
 #endif
@@ -412,6 +410,9 @@ static int process_gdb_command(struct gdb_data *data, char *buf)
 		return restart_program(data);
 
 	case 'g': /* Read registers */
+		ret = rtos_handle_generic_cmd(data, buf, &handled);
+		if (handled)
+			return ret;
 		return read_registers(data);
 
 	case 'G': /* Write registers */
@@ -422,9 +423,17 @@ static int process_gdb_command(struct gdb_data *data, char *buf)
 			return monitor_command(data, buf + 6);
 		if (!strncmp(buf, "qSupported", 10))
 			return gdb_send_supported(data);
-		if (!strncmp(buf, "qfThreadInfo", 12))
-			return gdb_send_empty_threadlist(data);
+		ret = rtos_handle_generic_cmd(data, buf, &handled);
+		if (handled)
+			return ret;
 		break;
+
+	case 'H':
+	case 'T':
+			ret = rtos_handle_generic_cmd(data, buf, &handled);
+			if (handled)
+				return ret;
+			break;
 
 	case 'm': /* Read memory */
 		return read_memory(data, buf + 1);
@@ -515,6 +524,7 @@ static int gdb_server(int port)
 	       inet_ntoa(addr.sin_addr), htons(addr.sin_port));
 
 	gdb_init(&data, client);
+	rtos_init();
 
 	/* Put the hardware breakpoint setting into a known state. */
 	printc("Clearing all breakpoints...\n");
