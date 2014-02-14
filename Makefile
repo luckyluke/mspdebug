@@ -72,7 +72,7 @@ else
     endif
 endif
 
-INCLUDES = -I. -Isimio -Iformats -Itransport -Idrivers -Iutil -Iui
+INCLUDES = -I. -Isimio -Iformats -Itransport -Idrivers -Iutil -Iui -Irtos
 GCC_CFLAGS = -O1 -Wall -Wno-char-subscripts -ggdb
 CONFIG_CFLAGS = -DLIB_DIR=\"$(LIBDIR)\"
 
@@ -176,7 +176,9 @@ OBJ=\
     ui/input.o \
     ui/input_console.o \
     ui/input_async.o \
-    ui/main.o
+    ui/main.o \
+    rtos/rtos.o \
+    rtos/chibios.o
 
 $(BINARY): $(OBJ)
 	$(MSPDEBUG_CC) $(MSPDEBUG_LDFLAGS) -o $@ $^ $(MSPDEBUG_LIBS)
