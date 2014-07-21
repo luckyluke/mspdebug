@@ -25,6 +25,7 @@
 #include "util.h"
 #include "device.h"
 #include "gdb_proto.h"
+#include "output.h"
 #include "chibios.h"
 
 /**
@@ -156,23 +157,35 @@ int chibios_update_debug(struct rtos_data *rtos)
 		free(rtos->extra);
 
 	rtos->extra = malloc(sizeof(chdebug_t));
-	if (!rtos->extra)
+	if (!rtos->extra){
+		printc_err("Could not allocate ChibiOS debug structure "
+				   "in local memory\n");
 		return -1;
+	}
 
 	if (device_readmem(rtos->symbols[1].addr,
 					   rtos->extra, sizeof(chdebug_t)) < 0) {
 		free(rtos->extra);
 		rtos->extra = NULL;
+		printc_err("Could not read ChibiOS memory signature from target\n");
 		return -1;
 	}
 
 	debug = rtos->extra;
 
 	if (strncmp(debug->ch_identifier, "main", 4)) {
+		printc_err("ChibiOS memory signature does not contain magic bytes\n");
+		return -1;
+	}
+
+	if (debug->ch_zero != 0){
+		printc_err("ChibiOS test byte in memory signature is not zero\n");
 		return -1;
 	}
 
 	if (debug->ch_size < sizeof(chdebug_t)) {
+		printc_err("ChibiOS memory signature claims to be smaller "
+				   "than expected\n");
 		return -1;
 	}
 
@@ -211,19 +224,27 @@ int chibios_update_threads(struct rtos_data *rtos)
 	rlist = rtos->symbols[0].addr;
 	current = previous = rlist;
 	while (1) {
-		if (readaddr(current + debug->cf_off_newer, &current) < 0)
+		if (readaddr(current + debug->cf_off_newer, &current) < 0){
+			printc_err("Could not read ChibiOS next thread\n");
 			return -2;
+		}
 
+		// integrity check 1
 		if (current == 0){
+			printc_err("ChibiOS registry integrity check failed, NULL pointer\n");
 			nfound = -1;
 			break;
 		}
 
-		if (readaddr(current + debug->cf_off_older, &older) < 0)
+		if (readaddr(current + debug->cf_off_older, &older) < 0){
+			printc_err("Could not read previous thread for integrity check\n");
 			return -3;
+		}
 
-		// integrity check
+		// integrity check 2
 		if ((older == 0) || (older != previous)){
+			printc_err("ChibiOS registry integrity check failed, "
+					   "double linked list violation\n");
 			nfound = -1;
 			break;
 		}
@@ -262,34 +283,47 @@ int chibios_update_threads(struct rtos_data *rtos)
 			unsigned char state;
 			char name_tmp[MAX_NAME_LEN];
 
-			if (readaddr(current + debug->cf_off_newer, &current) < 0)
+			if (readaddr(current + debug->cf_off_newer, &current) < 0){
+				printc_err("Could not read next ChibiOS thread\n");
 				return -2;
+			}
 			if (current == rlist)
 				break;
 
 			cur_thd->id = (uint64_t)current;
 
-			if (readaddr(current + debug->cf_off_name, &name_ptr) < 0)
+			if (readaddr(current + debug->cf_off_name, &name_ptr) < 0){
+				printc_err("Could not read ChibiOS thread name pointer\n");
 				return -3;
-			if (device_readmem(name_ptr, (unsigned char*)name_tmp, MAX_NAME_LEN) < 0)
+			}
+			if (device_readmem(name_ptr, (unsigned char*)name_tmp, MAX_NAME_LEN) < 0){
+				printc_err("Could not read ChibiOS thread name\n");
 				return -4;
+			}
 			name_tmp[MAX_NAME_LEN - 1] = '\x00';
 			if (name_tmp[0] == '\x00')
 				strcpy(name_tmp, "No Name");
 
 			cur_thd->name = malloc(strlen(name_tmp) + 1);
-			if (!cur_thd->name)
+			if (!cur_thd->name){
+				printc_err("Could not allocate memory for ChibiOS name\n");
 				return -5;
+			}
 			sprintf(cur_thd->name, "%s", name_tmp);
 
-			if (device_readmem(current + debug->cf_off_state, &state, 1) < 0)
+			if (device_readmem(current + debug->cf_off_state, &state, 1) < 0){
+				printc_err("Could not read ChibiOS thread state\n");
 				return -3;
+			}
 			if (state > THD_STATE_FINAL)
 				state = THD_STATE_UNKNOWN;
 
 			cur_thd->extra_info = malloc(strlen(thread_state_names[state]) + 1);
-			if (!cur_thd->extra_info)
+			if (!cur_thd->extra_info){
+				printc_err("Could not allocate memory "
+						   "for ChibiOS thread extra info\n");
 				return -5;
+			}
 			sprintf(cur_thd->extra_info, "%s", thread_state_names[state]);
 
 			cur_thd++;
