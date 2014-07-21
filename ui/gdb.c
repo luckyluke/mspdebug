@@ -439,6 +439,7 @@ static int process_gdb_command(struct gdb_data *data, char *buf)
 				register_bytes = 4;
 
 			return gdb_send_supported(data);
+		}
 
 		ret = rtos_handle_generic_cmd(data, buf, &handled);
 		if (handled)
@@ -447,10 +448,10 @@ static int process_gdb_command(struct gdb_data *data, char *buf)
 
 	case 'H':
 	case 'T':
-			ret = rtos_handle_generic_cmd(data, buf, &handled);
-			if (handled)
-				return ret;
-			break;
+		ret = rtos_handle_generic_cmd(data, buf, &handled);
+		if (handled)
+			return ret;
+		break;
 
 	case 'm': /* Read memory */
 		return read_memory(data, buf + 1);
@@ -507,7 +508,7 @@ static int gdb_server(int port)
 
 	arg = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
-		       (void *)&arg, sizeof(arg)) < 0)
+				   (void *)&arg, sizeof(arg)) < 0)
 		pr_error("gdb: warning: can't reuse socket address");
 
 	addr.sin_family = AF_INET;
@@ -515,7 +516,7 @@ static int gdb_server(int port)
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		printc_err("gdb: can't bind to port %d: %s\n",
-			port, last_error());
+				   port, last_error());
 		closesocket(sock);
 		return -1;
 	}
@@ -538,7 +539,7 @@ static int gdb_server(int port)
 
 	closesocket(sock);
 	printc("Client connected from %s:%d\n",
-	       inet_ntoa(addr.sin_addr), htons(addr.sin_port));
+		   inet_ntoa(addr.sin_addr), htons(addr.sin_port));
 
 	register_bytes = 2;
 	gdb_init(&data, client);
