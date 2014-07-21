@@ -36,6 +36,8 @@
 #include "ctrlc.h"
 #include "rtos.h"
 
+static int register_bytes;
+
 /************************************************************************
  * GDB server
  */
@@ -50,10 +52,17 @@ static int read_registers(struct gdb_data *data)
 		return gdb_send(data, "E00");
 
 	gdb_packet_start(data);
-	for (i = 0; i < DEVICE_NUM_REGS; i++)
-		gdb_printf(data, "%02x%02x",
-			   regs[i] & 0xff,
-			   (regs[i] >> 8) & 0xff);
+
+	for (i = 0; i < DEVICE_NUM_REGS; i++) {
+		address_t value = regs[i];
+		int j;
+
+		for (j = 0; j < register_bytes; j++) {
+			gdb_printf(data, "%02x", value & 0xff);
+			value >>= 8;
+		}
+	}
+
 	gdb_packet_end(data);
 	return gdb_flush_ack(data);
 }
@@ -244,7 +253,7 @@ static int run_final_status(struct gdb_data *data)
 		 *       register. It complains if we give the full data.
 		 */
 		gdb_printf(data, "%02x:", i);
-		for (j = 0; j < 2; j++) {
+		for (j = 0; j < register_bytes; j++) {
 			gdb_printf(data, "%02x", value & 0xff);
 			value >>= 8;
 		}
@@ -421,8 +430,16 @@ static int process_gdb_command(struct gdb_data *data, char *buf)
 	case 'q': /* Query */
 		if (!strncmp(buf, "qRcmd,", 6))
 			return monitor_command(data, buf + 6);
-		if (!strncmp(buf, "qSupported", 10))
+		if (!strncmp(buf, "qSupported", 10)) {
+			/* This is a hack to distinguish msp430-elf-gdb
+			 * from msp430-gdb. The former expects 32-bit
+			 * register fields.
+			 */
+			if (strstr(buf, "multiprocess+"))
+				register_bytes = 4;
+
 			return gdb_send_supported(data);
+
 		ret = rtos_handle_generic_cmd(data, buf, &handled);
 		if (handled)
 			return ret;
@@ -523,6 +540,7 @@ static int gdb_server(int port)
 	printc("Client connected from %s:%d\n",
 	       inet_ntoa(addr.sin_addr), htons(addr.sin_port));
 
+	register_bytes = 2;
 	gdb_init(&data, client);
 	rtos_init();
 

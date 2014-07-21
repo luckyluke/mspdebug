@@ -67,6 +67,8 @@ else
     else ifneq ($(filter $(UNAME_S),FreeBSD DragonFly),)
 	OS_CFLAGS = -pthread
 	OS_LIBS = -lpthread
+    else ifneq ($(filter $(UNAME_S),SunOS),)
+	OS_LIBS = -lpthread -ldl -lresolv -lsocket -lnsl
     else
 	OS_LIBS = -lpthread -ldl
     endif
@@ -149,6 +151,8 @@ OBJ=\
     drivers/hal_proto.o \
     drivers/v3hil.o \
     drivers/fet3.o \
+    drivers/bsllib.o \
+    drivers/rom_bsl.o \
     formats/binfile.o \
     formats/coff.o \
     formats/elf32.o \
